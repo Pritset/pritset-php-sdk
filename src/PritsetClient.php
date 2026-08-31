@@ -16,8 +16,8 @@ final class PritsetClient
     private readonly DocumentsClient $documents;
 
     public function __construct(
-        string $accessToken,
-        string $secret,
+        #[\SensitiveParameter] string $accessToken,
+        #[\SensitiveParameter] string $secret,
         string $baseUrl = 'https://api.pritset.com',
         float $timeout = 30.0,
         ?ClientInterface $httpClient = null,

@@ -217,6 +217,31 @@ final class PritsetClientTest extends TestCase
         }
     }
 
+    public function testReportsTlsFailureWithoutLeakingHandlerDetails(): void
+    {
+        $request = new Request('GET', 'https://api.pritset.com', ['Authorization' => 'leaked-token']);
+        $failure = new ConnectException(
+            'leaked-token client-secret',
+            $request,
+            null,
+            ['errno' => 60, 'error' => 'certificate failure leaked-token client-secret'],
+        );
+        $client = $this->client([$failure]);
+
+        try {
+            $client->templates()->list();
+            self::fail('Expected transport exception.');
+        } catch (PritsetTransportException $exception) {
+            self::assertSame(
+                'TLS certificate verification failed. Configure PHP curl.cainfo and openssl.cafile with a trusted CA bundle.',
+                $exception->getMessage(),
+            );
+            self::assertStringNotContainsString('leaked-token', $exception->getMessage());
+            self::assertStringNotContainsString('client-secret', $exception->getMessage());
+            self::assertNull($exception->getPrevious());
+        }
+    }
+
     public function testClientDebugOutputDoesNotExposeCredentials(): void
     {
         $client = $this->client([]);
@@ -224,6 +249,27 @@ final class PritsetClientTest extends TestCase
 
         self::assertStringNotContainsString('access-token', $dump);
         self::assertStringNotContainsString('client-secret', $dump);
+    }
+
+    public function testConstructorTracesRedactCredentials(): void
+    {
+        $previous = ini_get('zend.exception_ignore_args');
+
+        try {
+            $changed = ini_set('zend.exception_ignore_args', '0');
+            self::assertNotFalse($changed, 'The test must be able to enable exception arguments.');
+            new PritsetClient('trace-access-token', 'trace-client-secret', '/invalid');
+            self::fail('Expected invalid base URL exception.');
+        } catch (\InvalidArgumentException $exception) {
+            $trace = var_export($exception->getTrace(), true);
+            self::assertStringContainsString(\SensitiveParameterValue::class, $trace);
+            self::assertStringNotContainsString('trace-access-token', $trace);
+            self::assertStringNotContainsString('trace-client-secret', $trace);
+        } finally {
+            if ($previous !== false) {
+                ini_set('zend.exception_ignore_args', $previous);
+            }
+        }
     }
 
     #[DataProvider('invalidBaseUrlProvider')]

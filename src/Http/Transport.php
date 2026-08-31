@@ -6,6 +6,7 @@ namespace Pritset\Http;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use Pritset\Exception\PritsetApiException;
 use Pritset\Exception\PritsetTransportException;
@@ -19,8 +20,8 @@ final class Transport
     private readonly string $baseUrl;
 
     public function __construct(
-        private readonly string $accessToken,
-        private readonly string $secret,
+        #[\SensitiveParameter] private readonly string $accessToken,
+        #[\SensitiveParameter] private readonly string $secret,
         string $baseUrl = 'https://api.pritset.com',
         private readonly float $timeout = 30.0,
         private readonly ClientInterface $httpClient = new Client(),
@@ -116,7 +117,7 @@ final class Transport
                 'Accept' => 'application/json',
                 'Authorization' => $this->accessToken,
                 'X-Secret' => $this->secret,
-                'User-Agent' => 'pritset-php/0.1.0',
+                'User-Agent' => 'pritset-php/0.1.5',
             ],
             is_array($options['headers'] ?? null) ? $options['headers'] : [],
         );
@@ -127,6 +128,8 @@ final class Transport
 
         try {
             $response = $this->httpClient->request($method, $this->url($path), $options);
+        } catch (ConnectException $error) {
+            throw new PritsetTransportException(self::connectFailureMessage($error->getHandlerContext()));
         } catch (GuzzleException) {
             throw new PritsetTransportException('The request to Pritset failed before a response was received.');
         } catch (\Throwable) {
@@ -230,5 +233,22 @@ final class Transport
     {
         $value = $response->getHeaderLine($name);
         return $value === '' ? null : $value;
+    }
+
+    /** @param array<string, mixed> $context */
+    private static function connectFailureMessage(array $context): string
+    {
+        $rawErrorNumber = $context['errno'] ?? null;
+        $errorNumber = is_int($rawErrorNumber) || (is_string($rawErrorNumber) && ctype_digit($rawErrorNumber))
+            ? (int) $rawErrorNumber
+            : null;
+
+        return match ($errorNumber) {
+            6 => 'Pritset could not be reached because DNS resolution failed.',
+            7 => 'Pritset could not be reached because the connection failed.',
+            28 => 'The request to Pritset timed out before a response was received.',
+            60 => 'TLS certificate verification failed. Configure PHP curl.cainfo and openssl.cafile with a trusted CA bundle.',
+            default => 'The request to Pritset failed before a response was received.',
+        };
     }
 }

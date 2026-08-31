@@ -2,7 +2,7 @@
 
 Official PHP client for managing Pritset DOCX templates and generating PDFs.
 
-> **Pre-release:** version `0.1.0` targets Pritset SDK contract `1.0.0`. The package has not yet been published to Packagist.
+Version `0.1.5` targets Pritset SDK contract `1.0.0`.
 
 ## Requirements
 
@@ -12,13 +12,13 @@ Official PHP client for managing Pritset DOCX templates and generating PDFs.
 
 ## Installation
 
-After the first release is available on Packagist:
+Install version `0.1.5` from Packagist:
 
 ```bash
-composer require pritset/pritset-php
+composer require pritset/pritset-php:0.1.5
 ```
 
-For local development before publication, add this repository as a Composer path repository.
+For SDK development from a source checkout, add this repository as a Composer path repository.
 
 ## Create a client
 
@@ -203,6 +203,30 @@ composer audit
 ```
 
 The contract hash check, PHPUnit suite, and PHPStan level 8 analysis all run in CI on PHP 8.3, 8.4, and 8.5.
+
+## Production test-user lifecycle validation
+
+The opt-in production test validates template upload, listing, details, update, download, direct PDF generation, webhook job submission, deletion, and the final `404` response. It must use a dedicated production test user. The test creates a uniquely named template and removes it in a `finally` cleanup block. A short configurable delay lets the asynchronous webhook job start before cleanup; this test confirms submission, not delivery to the receiver.
+
+For a local PowerShell run, copy `.env.example` to `.env`, fill in the dedicated production test-user credentials and controlled webhook URL, and set both production confirmation flags to `true`. The `.env` file is ignored by Git. Then run:
+
+```powershell
+pwsh ./scripts/run-production-test.ps1
+```
+
+To use a file in another location:
+
+```powershell
+pwsh ./scripts/run-production-test.ps1 -EnvFile C:\secure\pritset-production-test.env
+```
+
+The launcher requires typing `RUN-PRODUCTION-TEST` before it contacts production. It reads only known Pritset settings, never prints secret values, restores the previous process environment afterward, and requires the raw Pritset access token without a `Bearer ` prefix.
+
+The launcher requires installed Composer dependencies but invokes PHP directly. It selects a readable CA certificate bundle from `PRITSET_CA_BUNDLE_PATH`, PHP configuration, or Git for Windows and passes it only to the lifecycle process. This avoids changing the machine-wide PHP configuration.
+
+The manual `Production test lifecycle` GitHub Actions workflow uses the protected `production-test` environment and requires the same confirmation. Configure `PRITSET_ACCESS_TOKEN`, `PRITSET_SECRET`, and `PRITSET_WEBHOOK_URL` as environment secrets and `PRITSET_PRODUCTION_TEST_USER_CONFIRMED=true` as an environment variable. Add required reviewers and restrict deployment branches before running it.
+
+The lifecycle may consume production test-user credit and create webhook traffic. A `401` on the first validation request means the credentials were rejected; no template has been created at that point.
 
 ## License
 

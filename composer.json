@@ -28,6 +28,7 @@
         "contract:check": "php scripts/verify-contract.php",
         "test": "phpunit",
         "analyse": "phpstan analyse --no-progress",
+        "production:test": "php scripts/production-lifecycle.php",
         "verify": [
             "@contract:check",
             "@test",

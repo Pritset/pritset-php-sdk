@@ -1,0 +1,51 @@
+name: Production test lifecycle
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RUN-PRODUCTION-TEST to confirm production test-user execution
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pritset-php-sdk-production-test
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-test
+    steps:
+      - name: Verify explicit production confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [[ "$CONFIRMATION" != "RUN-PRODUCTION-TEST" ]]; then
+            echo "Production test was not explicitly confirmed."
+            exit 1
+          fi
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Run production lifecycle
+        env:
+          PRITSET_BASE_URL: https://api.pritset.com
+          PRITSET_ACCESS_TOKEN: ${{ secrets.PRITSET_ACCESS_TOKEN }}
+          PRITSET_SECRET: ${{ secrets.PRITSET_SECRET }}
+          PRITSET_WEBHOOK_URL: ${{ secrets.PRITSET_WEBHOOK_URL }}
+          PRITSET_ALLOW_PRODUCTION: "true"
+          PRITSET_PRODUCTION_TEST_USER_CONFIRMED: ${{ vars.PRITSET_PRODUCTION_TEST_USER_CONFIRMED }}
+          PRITSET_TEST_RUN_PREFIX: pritset-php-production-test
+          PRITSET_WEBHOOK_SETTLE_SECONDS: "10"
+        run: composer run production:test
